@@ -1,53 +1,55 @@
 # Glitchify
 
-Glitchify, temiz ses dosyalarini bozulmus, nostaljik, kirik ve sinematik glitch dokularina donusturen macOS odakli bir komut satiri ses aracidir.
+[English](README.md) | Türkçe
 
-Pratik komut satiri giris noktasi `gfi` komutudur. `glitchify.sh` dosyasi ise geriye donuk uyumluluk icin korunur.
+Glitchify, temiz ses dosyalarını bozulmuş, nostaljik, kırık ve sinematik glitch dokularına dönüştüren macOS odaklı bir komut satırı ses aracıdır.
 
-`ffmpeg` + `sox` tabanli kararlı bir isleme zinciri kullanir ve tek seferlik bir betikten daha kullanisli bir araca donusur:
+Pratik komut satırı giriş noktası `gfi` komutudur. `glitchify.sh` dosyası ise geriye dönük uyumluluk için korunur.
 
-- kisa komut adi
-- icerik ureticilerine uygun modlar
-- ayarlanabilir etki yogunlugu
-- seed ile tekrar uretilebilir rastgelelestirme
-- istege bagli texture katmani
-- farkli ses cikis formatlari
-- sosyal medya icin basit sabit goruntulu video cikisi
-- toplu isleme ve smoke test betikleri
+`ffmpeg` + `sox` tabanlı kararlı bir işleme zinciri kullanır ve tek seferlik bir betikten daha kullanışlı bir araca dönüşür:
 
-## Son Degisiklikler
+- kısa komut adı
+- içerik üreticilerine uygun modlar
+- ayarlanabilir etki yoğunluğu
+- seed ile tekrar üretilebilir rastgeleleştirme
+- isteğe bağlı texture katmanı
+- farklı ses çıkış formatları
+- sosyal medya için basit sabit görüntülü video çıkışı
+- toplu işleme ve smoke test betikleri
 
-- pratik kisa CLI adi: `gfi`
-- `glitchify.sh` uyumluluk sarmalayicisi olarak korunur
-- ses modlari `lofi`, `loop` ve `wreck` olarak sadeleştirildi
-- mikro tempo dalgalanmasi ve needle-loop glitch davranisi eklendi
-- `loop` ve `wreck` modlari daha belirgin skip benzeri efektler uretir
-- smoke test artik hem ses hem MP4 cikisini dogrular
+## Son Değişiklikler
 
-## Ozellikler
+- pratik kısa CLI adı: `gfi`
+- `glitchify.sh` uyumluluk sarmalayıcısı olarak korunur
+- ses modları `lofi`, `loop` ve `wreck` olarak sadeleştirildi
+- mikro tempo dalgalanması ve needle-loop glitch davranışı eklendi
+- `loop` ve `wreck` modları daha belirgin skip benzeri efektler üretir
+- smoke test artık hem ses hem MP4 çıkışını doğrular
 
-Glitchify su isleme zincirini uygular:
+## Özellikler
 
-1. kaynak sesi calisma WAV dosyasina cevirir
+Glitchify şu işleme zincirini uygular:
+
+1. kaynak sesi çalışma WAV dosyasına çevirir
 2. downsample ve band daraltma ile bozar
 3. kaset benzeri hareket ekler
-4. mikro tempo dalgalanmasi uygular
-5. reverb ve drive katmani ekler
-6. istege bagli texture katmani karistirir
+4. mikro tempo dalgalanması uygular
+5. reverb ve drive katmanı ekler
+6. isteğe bağlı texture katmanı karıştırır
 7. needle-loop glitch ve bazen reverse kesitler ekler
-8. ses ve istege bagli video cikisi uretir
+8. ses ve isteğe bağlı video çıkışı üretir
 
 Modlar:
 
-- `lofi`: muzikalligi koruyan hafif drift ve tek temiz loop
-- `loop`: needle-loop ve skip etkisini daha belirgin kullanir
-- `wreck`: daha sert, daha kirik ve daha dengesiz bir sonuc verir
+- `lofi`: müzikalliği koruyan hafif drift ve tek temiz loop
+- `loop`: needle-loop ve skip etkisini daha belirgin kullanır
+- `wreck`: daha sert, daha kırık ve daha dengesiz bir sonuç verir
 
 Efekt karakteri:
 
-- `lofi` gercek parcalar icin en guvenli varsayilan moddur
-- `loop` daha cok plak atlamasi / needle-loop hissine odaklanir
-- `wreck` loop glitch, drift, texture ve bazen reverse parcalari birlestirir
+- `lofi` gerçek parçalar için en güvenli varsayılan moddur
+- `loop` daha çok plak atlaması / needle-loop hissine odaklanır
+- `wreck` loop glitch, drift, texture ve bazen reverse parçaları birleştirir
 
 ## Kurulum
 
@@ -57,7 +59,7 @@ Efekt karakteri:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
-### 2. Bagimliliklari kur
+### 2. Bağımlılıkları kur
 
 Elle kurulum:
 
@@ -65,14 +67,14 @@ Elle kurulum:
 brew install ffmpeg sox
 ```
 
-Yardimci betik ile:
+Yardımcı betik ile:
 
 ```bash
 chmod +x scripts/install-deps.sh
 ./scripts/install-deps.sh
 ```
 
-### 3. Projeyi klonla ve hazirla
+### 3. Projeyi klonla ve hazırla
 
 ```bash
 git clone https://github.com/frangedev/glitchify.git
@@ -80,15 +82,15 @@ cd glitchify
 chmod +x gfi glitchify.sh examples/batch_glitchify.sh scripts/install-deps.sh scripts/smoke-test.sh
 ```
 
-## Hizli Baslangic
+## Hızlı Başlangıç
 
 ```bash
 ./gfi ./path/to/song.mp3
 ```
 
-Bu komut, girdi dosyasinin yanina `glitched_` on ekiyle yeni bir dosya yazar.
+Bu komut, girdi dosyasının yanına `glitched_` ön ekiyle yeni bir dosya yazar.
 
-## Kullanim
+## Kullanım
 
 ```text
 Usage: gfi [options] <input-audio>
@@ -124,9 +126,9 @@ Workflow:
   -h, --help                        Show help
 ```
 
-## Ornekler
+## Örnekler
 
-Temel kullanim:
+Temel kullanım:
 
 ```bash
 ./gfi song.mp3
@@ -138,49 +140,49 @@ Daha agresif:
 ./gfi --mode wreck --intensity 150 song.wav
 ```
 
-Tekrar uretilebilir rastgele render:
+Tekrar üretilebilir rastgele render:
 
 ```bash
 ./gfi --mode loop --randomize --seed 42 song.wav
 ```
 
-Texture katmani:
+Texture katmanı:
 
 ```bash
 ./gfi --texture random --texture-level -20 song.mp3
 ```
 
-Ogg cikisi:
+Ogg çıkışı:
 
 ```bash
 ./gfi --format ogg --bitrate 160k song.wav
 ```
 
-Sosyal medya icin MP4:
+Sosyal medya için MP4:
 
 ```bash
 ./gfi --video-color '#081018' --output-dir ./exports song.wav
 ```
 
-Daha fazla calisabilir ornek icin [examples/README.md](examples/README.md) dosyasina bakin.
+Daha fazla çalışabilir örnek için [examples/README.md](examples/README.md) dosyasına bakın.
 
-## Guvenlik Notlari
+## Güvenlik Notları
 
-Mevcut shell yuzeyini temel guvenlik riskleri icin gozden gecirdim.
+Mevcut shell yüzeyini temel güvenlik riskleri için gözden geçirdim.
 
-- `eval` kullanilmiyor
-- harici komutlar quoted argumanlarla cagriliyor
-- gecici dosyalar `mktemp` ile ve ozel izinlerle olusturuluyor
-- ustune yazma davranisi yalnizca `--force` ile aktif oluyor
-- `--video-color` ffmpeg'e gitmeden once hex formatinda dogrulaniyor
+- `eval` kullanılmıyor
+- harici komutlar quoted argümanlarla çağrılıyor
+- geçici dosyalar `mktemp` ile ve özel izinlerle oluşturuluyor
+- üstüne yazma davranışı yalnızca `--force` ile aktif oluyor
+- `--video-color` ffmpeg'e gitmeden önce hex formatında doğrulanıyor
 
-Mevcut sinirlar:
+Mevcut sınırlar:
 
-- bu arac, gosterdiginiz yerel dosyalar uzerinde `ffmpeg` ve `sox` calistiran bir CLI olmaya devam ediyor
-- texture taramasi normal dosya adlarini hedefliyor; kotu niyetli newline iceren dosya adlari icin ekstra sertlestirme yok
-- bu ortamda `shellcheck` kurulu olmadigi icin onu calistiramadim
+- bu araç, gösterdiğiniz yerel dosyalar üzerinde `ffmpeg` ve `sox` çalıştıran bir CLI olmaya devam ediyor
+- texture taraması normal dosya adlarını hedefliyor; kötü niyetli newline içeren dosya adları için ekstra sertleştirme yok
+- bu ortamda `shellcheck` kurulu olmadığı için onu çalıştıramadım
 
-## Proje Yapisi
+## Proje Yapısı
 
 ```text
 .
@@ -200,16 +202,16 @@ Mevcut sinirlar:
 └── README.md
 ```
 
-## Yayginlasma Icin Sonraki Adimlar
+## Yaygınlaşma İçin Sonraki Adımlar
 
-Bu aracin yayilmasi icin su adimlar mantikli:
+Bu aracın yayılması için şu adımlar mantıklı:
 
 - Homebrew tap olarak paketlemek
-- daha zengin videolar icin waveform veya kapak gorseli sablonlari eklemek
-- `textures/` klasorune baslangic texture paketleri koymak
-- sosyal kanit icin `demo/` klasorunde ornek once/sonra cikislari yayinlamak
-- `scripts/smoke-test.sh` calistiran bir CI eklemek
+- daha zengin videolar için waveform veya kapak görseli şablonları eklemek
+- `textures/` klasörüne başlangıç texture paketleri koymak
+- sosyal kanıt için `demo/` klasöründe örnek önce/sonra çıkışları yayınlamak
+- `scripts/smoke-test.sh` çalıştıran bir CI eklemek
 
 ## Lisans
 
-Bu proje MIT License ile lisanslanmistir. Ayrinti icin [LICENSE](LICENSE) dosyasina bakin.
+Bu proje MIT License ile lisanslanmıştır. Ayrıntı için [LICENSE](LICENSE) dosyasına bakın.
