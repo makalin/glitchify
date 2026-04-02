@@ -1,0 +1,12 @@
+*.mp3
+*.wav
+*.aiff
+*.flac
+*.ogg
+*.m4a
+glitched_*
+examples/output/
+.DS_Store
+.idea/
+.vscode/
+tmp/

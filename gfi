@@ -1,0 +1,804 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+umask 077
+
+SCRIPT_NAME="$(basename "$0")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSION="2.0.0"
+
+DEFAULT_MODE="lofi"
+DEFAULT_FORMAT="mp3"
+DEFAULT_BITRATE="192k"
+DEFAULT_SAMPLE_RATE="44100"
+DEFAULT_INTENSITY="100"
+DEFAULT_SUFFIX=""
+DEFAULT_TEXTURE_LEVEL="-24"
+
+KEEP_TEMP=0
+FORCE_OVERWRITE=0
+RANDOMIZE=0
+MODE="$DEFAULT_MODE"
+OUTPUT_FORMAT="$DEFAULT_FORMAT"
+OUTPUT_BITRATE="$DEFAULT_BITRATE"
+SAMPLE_RATE="$DEFAULT_SAMPLE_RATE"
+INTENSITY="$DEFAULT_INTENSITY"
+SUFFIX="$DEFAULT_SUFFIX"
+TEXTURE_LEVEL_DB="$DEFAULT_TEXTURE_LEVEL"
+
+OUTPUT_PATH=""
+OUTPUT_DIR=""
+VIDEO_OUTPUT=""
+VIDEO_IMAGE=""
+VIDEO_COLOR=""
+INPUT_PATH=""
+TEXTURE_OPTION=""
+TEXTURE_PATH=""
+TMP_DIR=""
+SEED=""
+USER_GLITCH_LENGTH=""
+USER_GLITCH_REPEAT=""
+RANDOM_COUNTER=0
+RANDOM_SEED_BASE=0
+
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME [options] <input-audio>
+
+Create a Glitch-Fi remix with tempo drift, needle-loop glitches, and optional texture/video output.
+
+Core options:
+  -m, --mode <name>                 Mode: lofi, loop, wreck
+  -o, --output <path>               Write audio to a custom path
+      --output-dir <dir>            Directory for generated files
+      --format <mp3|wav|flac|ogg|m4a>
+                                    Audio output format. Default: $DEFAULT_FORMAT
+      --suffix <text>               Add a suffix before the output extension
+      --bitrate <value>             Audio bitrate for lossy formats. Default: $DEFAULT_BITRATE
+      --sample-rate <hz>            Output sample rate. Default: $DEFAULT_SAMPLE_RATE
+
+Sound design:
+      --intensity <1-200>           Scale the amount of degradation. Default: $DEFAULT_INTENSITY
+      --glitch-length <seconds>     Override needle-loop slice length
+      --glitch-repeat <count>       Override needle-loop repeat count
+      --randomize                   Randomize the preset subtly
+      --seed <number>               Seed for repeatable randomization
+      --texture <path|random>       Mix a texture bed from file or project textures folder
+      --texture-level <db>          Texture level in dB. Default: $DEFAULT_TEXTURE_LEVEL
+      --list-modes                  Print available modes
+
+Video export:
+      --video-image <path>          Render a static-image MP4 with the final audio
+      --video-color <hex>           Render a solid-color MP4, e.g. 101820 or #101820
+      --video-output <path>         Custom output path for the MP4
+
+Workflow:
+  -k, --keep-temp                   Keep intermediate files
+  -f, --force                       Overwrite existing output files
+      --version                     Show version
+  -h, --help                        Show help
+
+Examples:
+  ./$SCRIPT_NAME song.mp3
+  ./$SCRIPT_NAME --mode loop --randomize --seed 7 ./samples/loop.wav
+  ./$SCRIPT_NAME --mode wreck --texture random --video-color '#081018' ./input/track.flac
+EOF
+}
+
+list_modes() {
+  cat <<EOF
+lofi   Musical drift with subtle wow/flutter and one clean needle loop
+loop   Needle-loop focused with multiple skips and stronger motion
+wreck  More damaged, with harsher degradation, reverse cuts, and broken pacing
+EOF
+}
+
+die() {
+  printf 'Error: %s\n' "$1" >&2
+  exit 1
+}
+
+log() {
+  printf '[%s] %s\n' "$MODE" "$1"
+}
+
+cleanup() {
+  if [ "$KEEP_TEMP" -eq 0 ] && [ -n "${TMP_DIR:-}" ] && [ -d "$TMP_DIR" ]; then
+    rm -rf "$TMP_DIR"
+  fi
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing dependency: $1"
+}
+
+to_lower() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+float_add() {
+  awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a + b }'
+}
+
+float_sub() {
+  awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a - b }'
+}
+
+float_mul() {
+  awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a * b }'
+}
+
+float_div() {
+  awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a / b }'
+}
+
+clamp_float() {
+  awk -v value="$1" -v min="$2" -v max="$3" 'BEGIN {
+    if (value < min) value = min
+    if (value > max) value = max
+    printf "%.6f", value
+  }'
+}
+
+float_gt() {
+  awk -v a="$1" -v b="$2" 'BEGIN { exit !(a > b) }'
+}
+
+float_lt() {
+  awk -v a="$1" -v b="$2" 'BEGIN { exit !(a < b) }'
+}
+
+normalize_mode_alias() {
+  case "$1" in
+    classic|dreamy|washed) printf 'lofi' ;;
+    loop) printf 'loop' ;;
+    dark|broken|wreck) printf 'wreck' ;;
+    lofi) printf 'lofi' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+init_random_seed() {
+  if [ -n "$SEED" ]; then
+    RANDOM_SEED_BASE="$SEED"
+  else
+    RANDOM_SEED_BASE="$(date +%s)"
+  fi
+}
+
+next_random_unit() {
+  RANDOM_COUNTER=$((RANDOM_COUNTER + 1))
+  awk -v seed="${RANDOM_SEED_BASE}${RANDOM_COUNTER}" 'BEGIN {
+    srand(seed + 0)
+    printf "%.6f", rand()
+  }'
+}
+
+random_between() {
+  local unit
+  unit="$(next_random_unit)"
+  awk -v min="$1" -v max="$2" -v unit="$unit" 'BEGIN {
+    printf "%.6f", min + ((max - min) * unit)
+  }'
+}
+
+random_int_between() {
+  local unit
+  unit="$(next_random_unit)"
+  awk -v min="$1" -v max="$2" -v unit="$unit" 'BEGIN {
+    printf "%d", min + int(((max - min) + 1) * unit)
+  }'
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -m|--mode)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        MODE="$(normalize_mode_alias "$(to_lower "$2")")"
+        shift 2
+        ;;
+      -o|--output)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        OUTPUT_PATH="$2"
+        shift 2
+        ;;
+      --output-dir)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        OUTPUT_DIR="$2"
+        shift 2
+        ;;
+      --format)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        OUTPUT_FORMAT="$(to_lower "$2")"
+        shift 2
+        ;;
+      --suffix)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        SUFFIX="$2"
+        shift 2
+        ;;
+      --bitrate)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        OUTPUT_BITRATE="$2"
+        shift 2
+        ;;
+      --sample-rate)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        SAMPLE_RATE="$2"
+        shift 2
+        ;;
+      --intensity)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        INTENSITY="$2"
+        shift 2
+        ;;
+      --glitch-length)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        USER_GLITCH_LENGTH="$2"
+        shift 2
+        ;;
+      --glitch-repeat)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        USER_GLITCH_REPEAT="$2"
+        shift 2
+        ;;
+      --randomize)
+        RANDOMIZE=1
+        shift
+        ;;
+      --seed)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        SEED="$2"
+        shift 2
+        ;;
+      --texture)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        TEXTURE_OPTION="$2"
+        shift 2
+        ;;
+      --texture-level)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        TEXTURE_LEVEL_DB="$2"
+        shift 2
+        ;;
+      --video-image)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        VIDEO_IMAGE="$2"
+        shift 2
+        ;;
+      --video-color)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        VIDEO_COLOR="$2"
+        shift 2
+        ;;
+      --video-output)
+        [ "$#" -ge 2 ] || die "Missing value for $1"
+        VIDEO_OUTPUT="$2"
+        shift 2
+        ;;
+      --list-modes)
+        list_modes
+        exit 0
+        ;;
+      --version)
+        printf '%s %s\n' "$SCRIPT_NAME" "$VERSION"
+        exit 0
+        ;;
+      -k|--keep-temp)
+        KEEP_TEMP=1
+        shift
+        ;;
+      -f|--force)
+        FORCE_OVERWRITE=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        die "Unknown option: $1"
+        ;;
+      *)
+        if [ -n "$INPUT_PATH" ]; then
+          die "Only one input file is supported per run"
+        fi
+        INPUT_PATH="$1"
+        shift
+        ;;
+    esac
+  done
+
+  if [ -z "$INPUT_PATH" ] && [ "$#" -gt 0 ]; then
+    INPUT_PATH="$1"
+  fi
+
+  [ -n "$INPUT_PATH" ] || die "An input audio file is required. Run with --help for usage."
+}
+
+validate_args() {
+  [ -f "$INPUT_PATH" ] || die "Input file does not exist: $INPUT_PATH"
+
+  case "$OUTPUT_FORMAT" in
+    mp3|wav|flac|ogg|m4a) ;;
+    *) die "Unsupported output format: $OUTPUT_FORMAT" ;;
+  esac
+
+  case "$MODE" in
+    lofi|loop|wreck) ;;
+    *) die "Unsupported mode: $MODE" ;;
+  esac
+
+  awk -v value="$INTENSITY" 'BEGIN { exit !(value >= 1 && value <= 200) }' || die "Intensity must be between 1 and 200"
+  awk -v value="$SAMPLE_RATE" 'BEGIN { exit !(value >= 8000) }' || die "Sample rate must be 8000 or greater"
+
+  if [ -n "$USER_GLITCH_REPEAT" ]; then
+    awk -v value="$USER_GLITCH_REPEAT" 'BEGIN { exit !(value >= 1 && value <= 32) }' || die "Glitch repeat must be between 1 and 32"
+  fi
+
+  if [ -n "$USER_GLITCH_LENGTH" ]; then
+    awk -v value="$USER_GLITCH_LENGTH" 'BEGIN { exit !(value > 0) }' || die "Glitch length must be greater than 0"
+  fi
+
+  if [ -n "$VIDEO_IMAGE" ] && [ ! -f "$VIDEO_IMAGE" ]; then
+    die "Video image does not exist: $VIDEO_IMAGE"
+  fi
+
+  if [ -n "$VIDEO_IMAGE" ] && [ -n "$VIDEO_COLOR" ]; then
+    die "Use either --video-image or --video-color, not both"
+  fi
+
+  if [ -n "$VIDEO_COLOR" ]; then
+    case "$VIDEO_COLOR" in
+      \#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;;
+      [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;;
+      *) die "Video color must be a 6-digit hex value like 101820 or #101820" ;;
+    esac
+  fi
+}
+
+prepare_paths() {
+  local input_dir input_name stem target_dir output_name
+
+  input_dir="$(cd "$(dirname "$INPUT_PATH")" && pwd)"
+  input_name="$(basename "$INPUT_PATH")"
+  stem="${input_name%.*}"
+
+  if [ -n "$OUTPUT_PATH" ]; then
+    case "$OUTPUT_PATH" in
+      *.*) OUTPUT_FORMAT="$(to_lower "${OUTPUT_PATH##*.}")" ;;
+      *) OUTPUT_PATH="${OUTPUT_PATH}.${OUTPUT_FORMAT}" ;;
+    esac
+    mkdir -p "$(dirname "$OUTPUT_PATH")"
+    OUTPUT_PATH="$(cd "$(dirname "$OUTPUT_PATH")" && pwd)/$(basename "$OUTPUT_PATH")"
+  else
+    if [ -n "$OUTPUT_DIR" ]; then
+      mkdir -p "$OUTPUT_DIR"
+      target_dir="$(cd "$OUTPUT_DIR" && pwd)"
+    else
+      target_dir="$input_dir"
+    fi
+    output_name="glitched_${stem}${SUFFIX}.${OUTPUT_FORMAT}"
+    OUTPUT_PATH="$target_dir/$output_name"
+  fi
+
+  if [ -e "$OUTPUT_PATH" ] && [ "$FORCE_OVERWRITE" -ne 1 ]; then
+    die "Output file already exists: $OUTPUT_PATH (use --force to overwrite)"
+  fi
+
+  if [ -n "$VIDEO_IMAGE" ] || [ -n "$VIDEO_COLOR" ]; then
+    if [ -z "$VIDEO_OUTPUT" ]; then
+      VIDEO_OUTPUT="${OUTPUT_PATH%.*}.mp4"
+    else
+      case "$VIDEO_OUTPUT" in
+        *.mp4) ;;
+        *) VIDEO_OUTPUT="${VIDEO_OUTPUT}.mp4" ;;
+      esac
+      mkdir -p "$(dirname "$VIDEO_OUTPUT")"
+      VIDEO_OUTPUT="$(cd "$(dirname "$VIDEO_OUTPUT")" && pwd)/$(basename "$VIDEO_OUTPUT")"
+    fi
+
+    if [ -e "$VIDEO_OUTPUT" ] && [ "$FORCE_OVERWRITE" -ne 1 ]; then
+      die "Video output already exists: $VIDEO_OUTPUT (use --force to overwrite)"
+    fi
+  fi
+}
+
+resolve_mode() {
+  case "$MODE" in
+    lofi)
+      LOW_RATE="13000"
+      BAND_CENTER="1900"
+      BAND_WIDTH="2600"
+      CHORUS_DELAY="46"
+      CHORUS_DECAY="0.32"
+      CHORUS_SPEED="0.22"
+      CHORUS_DEPTH="0.30"
+      REVERB_REVERBERANCE="48"
+      REVERB_HF_DAMPING="38"
+      REVERB_ROOM_SCALE="28"
+      REVERB_STEREO_DEPTH="78"
+      REVERB_PRE_DELAY="6"
+      REVERB_WET_GAIN="-4"
+      OVERDRIVE_GAIN="5"
+      OVERDRIVE_COLOUR="12"
+      DRIFT_SEGMENTS="4"
+      DRIFT_MIN="0.985"
+      DRIFT_MAX="1.018"
+      GLITCH_LENGTH="0.08"
+      GLITCH_REPEAT="3"
+      GLITCH_COUNT="1"
+      REVERSE_CHANCE="0"
+      ;;
+    loop)
+      LOW_RATE="11000"
+      BAND_CENTER="1750"
+      BAND_WIDTH="2300"
+      CHORUS_DELAY="44"
+      CHORUS_DECAY="0.33"
+      CHORUS_SPEED="0.30"
+      CHORUS_DEPTH="0.40"
+      REVERB_REVERBERANCE="44"
+      REVERB_HF_DAMPING="36"
+      REVERB_ROOM_SCALE="24"
+      REVERB_STEREO_DEPTH="68"
+      REVERB_PRE_DELAY="5"
+      REVERB_WET_GAIN="-5"
+      OVERDRIVE_GAIN="7"
+      OVERDRIVE_COLOUR="16"
+      DRIFT_SEGMENTS="5"
+      DRIFT_MIN="0.970"
+      DRIFT_MAX="1.030"
+      GLITCH_LENGTH="0.10"
+      GLITCH_REPEAT="5"
+      GLITCH_COUNT="2"
+      REVERSE_CHANCE="35"
+      ;;
+    wreck)
+      LOW_RATE="8500"
+      BAND_CENTER="1550"
+      BAND_WIDTH="1800"
+      CHORUS_DELAY="40"
+      CHORUS_DECAY="0.28"
+      CHORUS_SPEED="0.34"
+      CHORUS_DEPTH="0.34"
+      REVERB_REVERBERANCE="34"
+      REVERB_HF_DAMPING="30"
+      REVERB_ROOM_SCALE="20"
+      REVERB_STEREO_DEPTH="58"
+      REVERB_PRE_DELAY="3"
+      REVERB_WET_GAIN="-7"
+      OVERDRIVE_GAIN="14"
+      OVERDRIVE_COLOUR="26"
+      DRIFT_SEGMENTS="6"
+      DRIFT_MIN="0.955"
+      DRIFT_MAX="1.040"
+      GLITCH_LENGTH="0.07"
+      GLITCH_REPEAT="7"
+      GLITCH_COUNT="2"
+      REVERSE_CHANCE="65"
+      ;;
+  esac
+}
+
+apply_intensity() {
+  local ratio degrade_factor
+
+  ratio="$(float_div "$INTENSITY" "100")"
+  degrade_factor="$(float_add "0.60" "$(float_mul "$ratio" "0.40")")"
+
+  LOW_RATE="$(clamp_float "$(float_div "$LOW_RATE" "$degrade_factor")" "6500" "22000")"
+  BAND_WIDTH="$(clamp_float "$(float_mul "$BAND_WIDTH" "$(float_add "0.85" "$(float_mul "$ratio" "0.18")")")" "1200" "4200")"
+  CHORUS_DEPTH="$(clamp_float "$(float_mul "$CHORUS_DEPTH" "$(float_add "0.72" "$(float_mul "$ratio" "0.35")")")" "0.08" "1.50")"
+  OVERDRIVE_GAIN="$(clamp_float "$(float_mul "$OVERDRIVE_GAIN" "$(float_add "0.65" "$(float_mul "$ratio" "0.55")")")" "1" "40")"
+  GLITCH_LENGTH="$(clamp_float "$(float_mul "$GLITCH_LENGTH" "$(float_add "0.75" "$(float_mul "$ratio" "0.35")")")" "0.04" "0.35")"
+  GLITCH_REPEAT="$(awk -v base="$GLITCH_REPEAT" -v ratio="$ratio" 'BEGIN { printf "%d", base + int((ratio - 1.0) * 3.0) }')"
+  [ "$GLITCH_REPEAT" -ge 1 ] || GLITCH_REPEAT=1
+}
+
+apply_randomization() {
+  if [ "$RANDOMIZE" -ne 1 ]; then
+    return
+  fi
+
+  LOW_RATE="$(clamp_float "$(float_mul "$LOW_RATE" "$(random_between 0.88 1.08)")" "6500" "22000")"
+  BAND_CENTER="$(clamp_float "$(float_mul "$BAND_CENTER" "$(random_between 0.92 1.08)")" "900" "3000")"
+  CHORUS_SPEED="$(clamp_float "$(float_mul "$CHORUS_SPEED" "$(random_between 0.85 1.20)")" "0.10" "1.50")"
+  CHORUS_DEPTH="$(clamp_float "$(float_mul "$CHORUS_DEPTH" "$(random_between 0.85 1.20)")" "0.08" "1.50")"
+  OVERDRIVE_GAIN="$(clamp_float "$(float_mul "$OVERDRIVE_GAIN" "$(random_between 0.90 1.20)")" "1" "40")"
+  GLITCH_LENGTH="$(clamp_float "$(float_mul "$GLITCH_LENGTH" "$(random_between 0.85 1.25)")" "0.04" "0.40")"
+  GLITCH_REPEAT="$(random_int_between 2 9)"
+}
+
+apply_user_overrides() {
+  if [ -n "$USER_GLITCH_LENGTH" ]; then
+    GLITCH_LENGTH="$USER_GLITCH_LENGTH"
+  fi
+  if [ -n "$USER_GLITCH_REPEAT" ]; then
+    GLITCH_REPEAT="$USER_GLITCH_REPEAT"
+  fi
+}
+
+resolve_texture_path() {
+  local texture_dir files_count texture_files
+
+  if [ -z "$TEXTURE_OPTION" ]; then
+    return 0
+  fi
+
+  if [ "$TEXTURE_OPTION" = "random" ]; then
+    texture_dir="$SCRIPT_DIR/textures"
+    [ -d "$texture_dir" ] || die "Texture folder not found: $texture_dir"
+    texture_files="$TMP_DIR/texture-files.txt"
+    find "$texture_dir" -type f \( -iname '*.mp3' -o -iname '*.wav' -o -iname '*.flac' -o -iname '*.ogg' -o -iname '*.m4a' -o -iname '*.aiff' \) | sort >"$texture_files"
+    files_count="$(wc -l <"$texture_files" | tr -d ' ')"
+    [ "${files_count:-0}" -gt 0 ] || die "No audio textures were found in $texture_dir"
+    TEXTURE_PATH="$(sed -n "$(random_int_between 1 "$files_count")p" "$texture_files")"
+  else
+    TEXTURE_PATH="$TEXTURE_OPTION"
+  fi
+
+  [ -f "$TEXTURE_PATH" ] || die "Texture file does not exist: $TEXTURE_PATH"
+}
+
+extract_duration() {
+  ffprobe -v error -show_entries format=duration -of default=nokey=1:noprint_wrappers=1 "$1"
+}
+
+mix_texture() {
+  local source_wav="$1"
+  local output_wav="$2"
+  local duration
+
+  duration="$(extract_duration "$source_wav")"
+  [ -n "$duration" ] || die "Unable to detect duration for texture mix"
+
+  log "Mixing texture layer"
+  ffmpeg -hide_banner -loglevel error -y \
+    -stream_loop -1 -i "$TEXTURE_PATH" \
+    -i "$source_wav" \
+    -filter_complex "[0:a]atrim=0:${duration},asetpts=N/SR/TB,volume=${TEXTURE_LEVEL_DB}dB[tex];[1:a][tex]amix=inputs=2:weights='1 1':normalize=0[mix]" \
+    -map "[mix]" -ar "$SAMPLE_RATE" -ac 2 \
+    "$output_wav"
+}
+
+apply_tempo_drift() {
+  local source_wav="$1"
+  local output_wav="$2"
+  local duration segment_duration start tempo i seg_file list_file
+
+  duration="$(extract_duration "$source_wav")"
+  [ -n "$duration" ] || die "Unable to detect duration for tempo drift"
+  segment_duration="$(float_div "$duration" "$DRIFT_SEGMENTS")"
+  list_file="$TMP_DIR/drift-concat.txt"
+  : >"$list_file"
+
+  log "Applying micro tempo drift"
+  i=0
+  while [ "$i" -lt "$DRIFT_SEGMENTS" ]; do
+    start="$(float_mul "$segment_duration" "$i")"
+    tempo="$(random_between "$DRIFT_MIN" "$DRIFT_MAX")"
+    seg_file="$TMP_DIR/drift_$i.wav"
+    ffmpeg -hide_banner -loglevel error -y \
+      -i "$source_wav" -ss "$start" -t "$segment_duration" \
+      -filter:a "atempo=${tempo}" \
+      "$seg_file"
+    printf "file '%s'\n" "$seg_file" >>"$list_file"
+    i=$((i + 1))
+  done
+
+  ffmpeg -hide_banner -loglevel error -y \
+    -f concat -safe 0 -i "$list_file" \
+    -ar "$SAMPLE_RATE" -ac 2 \
+    "$output_wav"
+}
+
+calculate_glitch_window() {
+  local duration="$1"
+  local slot="$2"
+  local min_pos max_pos base_ratio
+
+  glitch_length="$GLITCH_LENGTH"
+  if ! float_gt "$duration" "$(float_add "$glitch_length" "0.20")"; then
+    glitch_length="$(float_mul "$duration" "0.12")"
+    if float_lt "$glitch_length" "0.04"; then
+      glitch_length="0.04"
+    fi
+  fi
+
+  case "$slot" in
+    1) min_pos="0.18"; max_pos="0.38";;
+    2) min_pos="0.52"; max_pos="0.78";;
+    *) min_pos="0.30"; max_pos="0.60";;
+  esac
+
+  base_ratio="$(random_between "$min_pos" "$max_pos")"
+  glitch_start="$(float_mul "$duration" "$base_ratio")"
+  glitch_end="$(float_add "$glitch_start" "$glitch_length")"
+
+  if float_gt "$glitch_end" "$duration"; then
+    glitch_start="$(float_sub "$duration" "$glitch_length")"
+  fi
+  if float_lt "$glitch_start" "0.02"; then
+    glitch_start="0.02"
+  fi
+  glitch_end="$(float_add "$glitch_start" "$glitch_length")"
+}
+
+apply_single_glitch() {
+  local source_wav="$1"
+  local output_wav="$2"
+  local slot="$3"
+  local duration pre slice post repeated reverse_flag reverse_slice concat_list
+
+  duration="$(extract_duration "$source_wav")"
+  [ -n "$duration" ] || die "Unable to detect audio duration"
+  calculate_glitch_window "$duration" "$slot"
+
+  pre="$TMP_DIR/glitch_${slot}_pre.wav"
+  slice="$TMP_DIR/glitch_${slot}_slice.wav"
+  post="$TMP_DIR/glitch_${slot}_post.wav"
+  repeated="$TMP_DIR/glitch_${slot}_repeat.wav"
+  reverse_slice="$TMP_DIR/glitch_${slot}_reverse.wav"
+  concat_list="$TMP_DIR/glitch_${slot}_concat.txt"
+
+  ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ss 0 -to "$glitch_start" "$pre"
+  ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ss "$glitch_start" -t "$glitch_length" "$slice"
+  ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ss "$glitch_end" "$post"
+  sox "$slice" "$repeated" repeat "$GLITCH_REPEAT"
+
+  reverse_flag=0
+  if [ "$REVERSE_CHANCE" -gt 0 ]; then
+    if [ "$(random_int_between 1 100)" -le "$REVERSE_CHANCE" ]; then
+      reverse_flag=1
+      sox "$slice" "$reverse_slice" reverse
+    fi
+  fi
+
+  : >"$concat_list"
+  printf "file '%s'\n" "$pre" >>"$concat_list"
+  printf "file '%s'\n" "$repeated" >>"$concat_list"
+  if [ "$reverse_flag" -eq 1 ]; then
+    printf "file '%s'\n" "$reverse_slice" >>"$concat_list"
+  fi
+  printf "file '%s'\n" "$post" >>"$concat_list"
+
+  ffmpeg -hide_banner -loglevel error -y \
+    -f concat -safe 0 -i "$concat_list" \
+    -ar "$SAMPLE_RATE" -ac 2 \
+    "$output_wav"
+}
+
+apply_glitch_passes() {
+  local source_wav="$1"
+  local current_wav="$source_wav"
+  local out_wav slot
+
+  log "Injecting needle-loop glitches"
+  slot=1
+  while [ "$slot" -le "$GLITCH_COUNT" ]; do
+    out_wav="$TMP_DIR/glitch_pass_${slot}.wav"
+    apply_single_glitch "$current_wav" "$out_wav" "$slot"
+    current_wav="$out_wav"
+    slot=$((slot + 1))
+  done
+
+  cp "$current_wav" "$TMP_DIR/final_glitched.wav"
+}
+
+encode_audio() {
+  local source_wav="$1"
+  local output_ext
+
+  output_ext="$(to_lower "${OUTPUT_PATH##*.}")"
+  log "Encoding final audio"
+
+  case "$output_ext" in
+    mp3)
+      ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ar "$SAMPLE_RATE" -ac 2 -codec:a libmp3lame -b:a "$OUTPUT_BITRATE" "$OUTPUT_PATH" ;;
+    wav)
+      ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ar "$SAMPLE_RATE" -ac 2 -codec:a pcm_s16le "$OUTPUT_PATH" ;;
+    flac)
+      ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ar "$SAMPLE_RATE" -ac 2 -codec:a flac "$OUTPUT_PATH" ;;
+    ogg)
+      ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ar "$SAMPLE_RATE" -ac 2 -codec:a libvorbis -b:a "$OUTPUT_BITRATE" "$OUTPUT_PATH" ;;
+    m4a)
+      ffmpeg -hide_banner -loglevel error -y -i "$source_wav" -ar "$SAMPLE_RATE" -ac 2 -codec:a aac -b:a "$OUTPUT_BITRATE" "$OUTPUT_PATH" ;;
+    *) die "Unsupported output extension: $output_ext" ;;
+  esac
+}
+
+render_video() {
+  local audio_input="$1"
+
+  if [ -z "$VIDEO_IMAGE" ] && [ -z "$VIDEO_COLOR" ]; then
+    return 0
+  fi
+
+  log "Rendering video companion"
+  if [ -n "$VIDEO_IMAGE" ]; then
+    ffmpeg -hide_banner -loglevel error -y \
+      -loop 1 -framerate 2 -i "$VIDEO_IMAGE" -i "$audio_input" \
+      -filter_complex "[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p[v]" \
+      -map "[v]" -map 1:a -c:v libx264 -preset medium -tune stillimage -c:a aac -b:a 192k -shortest \
+      "$VIDEO_OUTPUT"
+  else
+    ffmpeg -hide_banner -loglevel error -y \
+      -f lavfi -i "color=c=${VIDEO_COLOR}:s=1280x720:r=30" -i "$audio_input" \
+      -map 0:v -map 1:a -c:v libx264 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -shortest \
+      "$VIDEO_OUTPUT"
+  fi
+}
+
+parse_args "$@"
+validate_args
+prepare_paths
+init_random_seed
+resolve_mode
+apply_intensity
+apply_randomization
+apply_user_overrides
+
+require_command ffmpeg
+require_command ffprobe
+require_command sox
+
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gfi.XXXXXX")"
+trap cleanup EXIT
+
+resolve_texture_path
+
+INPUT_ABS="$(cd "$(dirname "$INPUT_PATH")" && pwd)/$(basename "$INPUT_PATH")"
+SOURCE_WAV="$TMP_DIR/source.wav"
+DEGRADED_WAV="$TMP_DIR/degraded.wav"
+WARBLED_WAV="$TMP_DIR/warbled.wav"
+REVERBED_WAV="$TMP_DIR/reverbed.wav"
+DRIVEN_WAV="$TMP_DIR/driven.wav"
+TEXTURED_WAV="$TMP_DIR/textured.wav"
+DRIFTED_WAV="$TMP_DIR/drifted.wav"
+FINAL_WAV="$TMP_DIR/final_glitched.wav"
+
+log "Decoding source audio"
+ffmpeg -hide_banner -loglevel error -y -i "$INPUT_ABS" -ac 2 -ar "$SAMPLE_RATE" -c:a pcm_s16le "$SOURCE_WAV"
+
+log "Applying lo-fi degradation and band shaping"
+sox "$SOURCE_WAV" "$DEGRADED_WAV" rate -v "$LOW_RATE" rate -v "$SAMPLE_RATE" bandpass "$BAND_CENTER" "$BAND_WIDTH" gain -n -1
+
+log "Adding wow/flutter motion"
+sox "$DEGRADED_WAV" "$WARBLED_WAV" chorus 0.7 0.9 "$CHORUS_DELAY" "$CHORUS_DECAY" "$CHORUS_SPEED" "$CHORUS_DEPTH" -s
+
+log "Adding atmospheric reverb"
+sox "$WARBLED_WAV" "$REVERBED_WAV" reverb "$REVERB_REVERBERANCE" "$REVERB_HF_DAMPING" "$REVERB_ROOM_SCALE" "$REVERB_STEREO_DEPTH" "$REVERB_PRE_DELAY" "$REVERB_WET_GAIN"
+
+log "Adding digital drive"
+sox "$REVERBED_WAV" "$DRIVEN_WAV" overdrive "$OVERDRIVE_GAIN" "$OVERDRIVE_COLOUR" gain -n -2
+
+PROCESS_WAV="$DRIVEN_WAV"
+if [ -n "$TEXTURE_PATH" ]; then
+  mix_texture "$DRIVEN_WAV" "$TEXTURED_WAV"
+  PROCESS_WAV="$TEXTURED_WAV"
+fi
+
+apply_tempo_drift "$PROCESS_WAV" "$DRIFTED_WAV"
+apply_glitch_passes "$DRIFTED_WAV"
+encode_audio "$FINAL_WAV"
+render_video "$OUTPUT_PATH"
+
+printf 'Created audio: %s\n' "$OUTPUT_PATH"
+if [ -n "$VIDEO_OUTPUT" ]; then
+  printf 'Created video: %s\n' "$VIDEO_OUTPUT"
+fi
+if [ -n "$TEXTURE_PATH" ]; then
+  printf 'Texture used: %s\n' "$TEXTURE_PATH"
+fi
+if [ "$RANDOMIZE" -eq 1 ]; then
+  printf 'Random seed: %s\n' "$RANDOM_SEED_BASE"
+fi
+if [ "$KEEP_TEMP" -eq 1 ]; then
+  printf 'Kept intermediate files in %s\n' "$TMP_DIR"
+fi
