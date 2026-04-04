@@ -17,6 +17,8 @@ It is built around a stable `ffmpeg` + `sox` pipeline, but it now behaves like a
 - simple static-video export for social posting
 - batch processing and smoke-test scripts
 
+Preview: https://makalin.github.io/glitchify/
+
 ## Latest Changes
 
 - practical short CLI name: `gfi`
