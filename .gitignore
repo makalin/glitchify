@@ -10,3 +10,8 @@ examples/output/
 .idea/
 .vscode/
 tmp/
+
+# GitHub Pages: index.html loads these; exceptions must come after rules above
+!test/
+!test/*.wav
+!test/*.mp3

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glitchify — compare demos</title>
+  <style>
+    :root {
+      --bg: #0e1014;
+      --surface: #171a21;
+      --border: #2a303c;
+      --text: #d4dae3;
+      --muted: #8b95a5;
+      --accent: #7eb8ff;
+      --dim: #5c6575;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 1.5rem clamp(1rem, 4vw, 2.5rem) 3rem;
+    }
+    header {
+      max-width: 56rem;
+      margin: 0 auto 1.75rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.25rem;
+    }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .repo-link {
+      margin: 0.65rem 0 0;
+    }
+    .repo-link a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.88rem;
+    }
+    .repo-link a:hover {
+      text-decoration: underline;
+    }
+    main {
+      max-width: 56rem;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+    #demos {
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.15rem 1.2rem 1.35rem;
+      margin-bottom: 0;
+    }
+    section.legend h2 {
+      color: var(--accent);
+    }
+    section h2 {
+      margin: 0 0 0.65rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+    section.legend {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    section.legend ul {
+      margin: 0.35rem 0 0;
+      padding-left: 1.15rem;
+    }
+    section.legend li { margin: 0.35rem 0; }
+    section.legend code {
+      font-size: 0.78rem;
+      background: var(--bg);
+      padding: 0.12rem 0.35rem;
+      border-radius: 4px;
+      color: var(--text);
+    }
+    .subh {
+      margin: 0.85rem 0 0.5rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--dim);
+    }
+    .subh:first-of-type { margin-top: 0.25rem; }
+    .grid-orig {
+      margin-bottom: 0.25rem;
+    }
+    .grid-3 {
+      display: grid;
+      gap: 0.85rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 640px) {
+      .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    }
+    .grid-2 {
+      display: grid;
+      gap: 0.85rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 480px) {
+      .grid-2 { grid-template-columns: repeat(2, 1fr); }
+    }
+    .cell label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    .cell label strong { color: var(--text); font-weight: 600; }
+    .tag-sample { color: var(--dim); font-weight: 400; }
+    audio {
+      width: 100%;
+      height: 36px;
+      filter: contrast(0.95) saturate(0.85);
+    }
+    footer {
+      max-width: 56rem;
+      margin: 2.5rem auto 0;
+      padding-top: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    footer p {
+      margin: 0 0 0.65rem;
+    }
+    footer p:last-child {
+      margin-bottom: 0;
+    }
+    .copyright {
+      color: var(--dim);
+      font-size: 0.72rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Glitchify — compare</h1>
+    <p>Each demo: original WAV, then <strong>lofi</strong> at three intensities, then <strong>loop</strong> and <strong>wreck</strong> at intensity 100 (MP3). Files live in <code>test/</code>.</p>
+    <p class="repo-link"><a href="https://github.com/frangedev/glitchify" rel="noopener noreferrer" target="_blank">github.com/frangedev/glitchify</a></p>
+  </header>
+
+  <main>
+    <section class="legend" aria-labelledby="legend-title">
+      <h2 id="legend-title">What you are hearing</h2>
+      <ul>
+        <li><strong>Lofi 70 / 100 / 140</strong> — same mode, more degradation as the number rises. Example: <code>./gfi --mode lofi --intensity 70 test/demo1.wav</code></li>
+        <li><strong>Lofi 100 (sample)</strong> — same as default <code>./gfi</code>; file name still uses <code>_sample</code> from the first batch.</li>
+        <li><strong>Loop</strong> — needle-loop and skip character: <code>./gfi --mode loop --intensity 100 …</code></li>
+        <li><strong>Wreck</strong> — heavier damage and reverse fragments: <code>./gfi --mode wreck --intensity 100 …</code></li>
+      </ul>
+    </section>
+
+    <div id="demos"></div>
+  </main>
+
+  <footer>
+    <p>Locally: serve the repo root (e.g. <code>python3 -m http.server</code>). On <strong>GitHub Pages</strong>, deploy from branch <code>main</code> at the repository root.</p>
+    <p class="copyright">Copyright © 2025 FRANGE</p>
+  </footer>
+
+  <script>
+    var demos = [
+      {
+        n: 1,
+        orig: 'test/demo1.wav',
+        lofi70: 'test/glitched_demo1_lofi_i070.mp3',
+        lofi100: 'test/glitched_demo1_sample.mp3',
+        lofi140: 'test/glitched_demo1_lofi_i140.mp3',
+        loop: 'test/glitched_demo1_loop_i100.mp3',
+        wreck: 'test/glitched_demo1_wreck_i100.mp3'
+      },
+      {
+        n: 2,
+        orig: 'test/demo2.wav',
+        lofi70: 'test/glitched_demo2_lofi_i070.mp3',
+        lofi100: 'test/glitched_demo2_sample.mp3',
+        lofi140: 'test/glitched_demo2_lofi_i140.mp3',
+        loop: 'test/glitched_demo2_loop_i100.mp3',
+        wreck: 'test/glitched_demo2_wreck_i100.mp3'
+      },
+      {
+        n: 3,
+        orig: 'test/demo3.wav',
+        lofi70: 'test/glitched_demo3_lofi_i070.mp3',
+        lofi100: 'test/glitched_demo3_sample.mp3',
+        lofi140: 'test/glitched_demo3_lofi_i140.mp3',
+        loop: 'test/glitched_demo3_loop_i100.mp3',
+        wreck: 'test/glitched_demo3_wreck_i100.mp3'
+      },
+      {
+        n: 4,
+        orig: 'test/demo4.wav',
+        lofi70: 'test/glitched_demo4_lofi_i070.mp3',
+        lofi100: 'test/glitched_demo4_sample.mp3',
+        lofi140: 'test/glitched_demo4_lofi_i140.mp3',
+        loop: 'test/glitched_demo4_loop_i100.mp3',
+        wreck: 'test/glitched_demo4_wreck_i100.mp3'
+      }
+    ];
+
+    var root = document.getElementById('demos');
+    var allAudios = [];
+
+    function cell(labelHtml, src) {
+      return (
+        '<div class="cell"><label>' + labelHtml + '</label>' +
+        '<audio controls preload="metadata" src="' + src + '"></audio></div>'
+      );
+    }
+
+    demos.forEach(function (d) {
+      var sec = document.createElement('section');
+      sec.innerHTML =
+        '<h2>Demo ' + d.n + '</h2>' +
+        '<p class="subh">Source</p>' +
+        '<div class="grid-orig">' +
+        cell('<strong>Original</strong> (WAV)', d.orig) +
+        '</div>' +
+        '<p class="subh">Lofi — compare intensity</p>' +
+        '<div class="grid-3">' +
+        cell('<strong>Lofi</strong> · intensity 70', d.lofi70) +
+        cell('<strong>Lofi</strong> · intensity 100 <span class="tag-sample">(sample)</span>', d.lofi100) +
+        cell('<strong>Lofi</strong> · intensity 140', d.lofi140) +
+        '</div>' +
+        '<p class="subh">Modes at intensity 100</p>' +
+        '<div class="grid-2">' +
+        cell('<strong>Loop</strong> · i100', d.loop) +
+        cell('<strong>Wreck</strong> · i100', d.wreck) +
+        '</div>';
+      root.appendChild(sec);
+      sec.querySelectorAll('audio').forEach(function (a) { allAudios.push(a); });
+    });
+
+    allAudios.forEach(function (el) {
+      el.addEventListener('play', function () {
+        allAudios.forEach(function (other) {
+          if (other !== el && !other.paused) other.pause();
+        });
+      });
+    });
+  </script>
+</body>
+</html>

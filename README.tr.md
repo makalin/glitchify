@@ -79,7 +79,7 @@ chmod +x scripts/install-deps.sh
 ```bash
 git clone https://github.com/frangedev/glitchify.git
 cd glitchify
-chmod +x gfi glitchify.sh examples/batch_glitchify.sh scripts/install-deps.sh scripts/smoke-test.sh
+chmod +x gfi glitchify.sh examples/batch_glitchify.sh examples/render_comparison_pack.sh scripts/install-deps.sh scripts/smoke-test.sh
 ```
 
 ## Hızlı Başlangıç
@@ -166,6 +166,10 @@ Sosyal medya için MP4:
 
 Daha fazla çalışabilir örnek için [examples/README.md](examples/README.md) dosyasına bakın.
 
+## Web demosu (GitHub Pages)
+
+Kök dizindeki [`index.html`](index.html), [`test/`](test/) içindeki dosyaları çalar ([`.gitignore`](.gitignore) istisnaları ile git’e eklenebilir). **Settings → Pages**: **Deploy from a branch** → **main** → **`/` (root)**. [`.nojekyll`](.nojekyll), GitHub’un Jekyll çalıştırmasını kapatır. Site adresi aynı sayfada (proje: `https://<kullanıcı>.github.io/<repo>/`).
+
 ## Güvenlik Notları
 
 Mevcut shell yüzeyini temel güvenlik riskleri için gözden geçirdim.
@@ -188,6 +192,9 @@ Mevcut sınırlar:
 .
 ├── gfi
 ├── glitchify.sh
+├── index.html
+├── test
+│   └── (Pages için demo WAV/MP3)
 ├── examples
 │   ├── README.md
 │   ├── batch_glitchify.sh
@@ -198,6 +205,7 @@ Mevcut sınırlar:
 ├── textures
 │   └── README.md
 ├── .gitignore
+├── .nojekyll
 ├── LICENSE
 └── README.md
 ```

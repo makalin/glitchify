@@ -79,7 +79,7 @@ chmod +x scripts/install-deps.sh
 ```bash
 git clone https://github.com/frangedev/glitchify.git
 cd glitchify
-chmod +x gfi glitchify.sh examples/batch_glitchify.sh scripts/install-deps.sh scripts/smoke-test.sh
+chmod +x gfi glitchify.sh examples/batch_glitchify.sh examples/render_comparison_pack.sh scripts/install-deps.sh scripts/smoke-test.sh
 ```
 
 ## Quick Start
@@ -166,6 +166,10 @@ Social-ready MP4:
 
 More runnable examples are in [examples/README.md](examples/README.md).
 
+## Web demo (GitHub Pages)
+
+[`index.html`](index.html) at the repo root plays the files in [`test/`](test/) (whitelisted in [`.gitignore`](.gitignore) so they can be committed). **Settings → Pages**: **Deploy from a branch** → **main** → **`/` (root)**. [`.nojekyll`](.nojekyll) tells GitHub not to run Jekyll on this static tree. The Pages URL is shown there (project repos: `https://<user>.github.io/<repo>/`).
+
 ## Security Notes
 
 I reviewed the current shell surface for obvious safety issues.
@@ -188,6 +192,9 @@ Current limits:
 .
 ├── gfi
 ├── glitchify.sh
+├── index.html
+├── test
+│   └── (demo WAV/MP3 for Pages)
 ├── examples
 │   ├── README.md
 │   ├── batch_glitchify.sh
@@ -198,6 +205,7 @@ Current limits:
 ├── textures
 │   └── README.md
 ├── .gitignore
+├── .nojekyll
 ├── LICENSE
 └── README.md
 ```
